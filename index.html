@@ -1000,7 +1000,25 @@
         <div class="table-wrap" id="comparisonTableWrap"></div>
       </article>
 
-      <!-- Panel 3B: All 77 Provinces Comparison Vertical Bar Chart (Full Width + Horizontal Scroll) -->
+      <!-- Panel 4: Distribution / Share Chart -->
+      <article class="panel">
+        <div class="panel-header">
+          <h2 id="shareChartTitle">สัดส่วนและโครงสร้างประชากร</h2>
+          <p class="source" id="shareChartSource">สัดส่วนประชากรจำแนกตามพื้นที่หรือโครงสร้างที่เลือก</p>
+        </div>
+        <div class="chart-box-compact"><canvas id="shareChart"></canvas></div>
+      </article>
+
+      <!-- Panel 5: Detailed Indicator Table -->
+      <article class="panel">
+        <div class="panel-header">
+          <h2 id="detailTableTitle">รายละเอียดตัวชี้วัดเชิงลึก</h2>
+          <p class="source" id="detailTableSource">ข้อมูลจำแนกเพศ เขตเทศบาล เคหะ และการเปลี่ยนแปลง</p>
+        </div>
+        <div class="table-wrap" id="detailTableWrap"></div>
+      </article>
+
+      <!-- Panel 5B: All 77 Provinces Comparison Vertical Bar Chart (Full Width + Horizontal Scroll) -->
       <article class="panel full" id="allProvincesPanel">
         <div class="panel-header">
           <h2 id="allProvChartTitle">เปรียบเทียบสถิติทุกจังหวัดทั่วประเทศ (77 จังหวัด: 76 จังหวัด + กรุงเทพมหานคร)</h2>
@@ -1051,24 +1069,6 @@
         </div>
 
         <div class="all-prov-missing-note" id="allProvMissingNote"></div>
-      </article>
-
-      <!-- Panel 4: Distribution / Share Chart -->
-      <article class="panel">
-        <div class="panel-header">
-          <h2 id="shareChartTitle">สัดส่วนและโครงสร้างประชากร</h2>
-          <p class="source" id="shareChartSource">สัดส่วนประชากรจำแนกตามพื้นที่หรือโครงสร้างที่เลือก</p>
-        </div>
-        <div class="chart-box-compact"><canvas id="shareChart"></canvas></div>
-      </article>
-
-      <!-- Panel 5: Detailed Indicator Table -->
-      <article class="panel">
-        <div class="panel-header">
-          <h2 id="detailTableTitle">รายละเอียดตัวชี้วัดเชิงลึก</h2>
-          <p class="source" id="detailTableSource">ข้อมูลจำแนกเพศ เขตเทศบาล เคหะ และการเปลี่ยนแปลง</p>
-        </div>
-        <div class="table-wrap" id="detailTableWrap"></div>
       </article>
 
       <!-- Panel 6: Dynamic Analytical Insights (Full Width) -->
@@ -1277,6 +1277,14 @@
       });
     }
 
+    // Menu 3 options (Source Mode) & memory of preferred mode for Census years
+    const SOURCE_MODES_ALL = [
+      { value: "compare_both", label: "เปรียบเทียบ 2 แหล่งข้อมูล (DOPA vs Census)" },
+      { value: "dopa_only", label: "ทะเบียนราษฎร กรมการปกครอง (DOPA: 2533–2568)" },
+      { value: "census_only", label: "สำมะโนประชากรและเคหะ สสช. (Census: 4 รอบ)" }
+    ];
+    let lastCensusSourceMode = "compare_both";
+
     // Menu 4 options filtered strictly by what exists in the selected source mode (Menu 3)
     const INDICATORS_BY_SOURCE = {
       compare_both: [
@@ -1297,6 +1305,37 @@
         { value: "housing", label: "ขนาดครัวเรือนเฉลี่ย (Avg. Household Size - Census)" }
       ]
     };
+
+    // Cascading filter logic: Year (Menu 2) -> Source Mode (Menu 3) -> Indicator (Menu 4)
+    function syncFiltersForYear(preserveIndicator) {
+      const y = Number(document.getElementById("yearSelect").value);
+      const isCensusYear = DATASET.censusYears.includes(y);
+      const srcSelect = document.getElementById("sourceModeSelect");
+
+      srcSelect.innerHTML = "";
+      SOURCE_MODES_ALL.forEach(item => {
+        const opt = document.createElement("option");
+        opt.value = item.value;
+        if (!isCensusYear && item.value !== "dopa_only") {
+          opt.disabled = true;
+          opt.textContent = item.label + " (ไม่มีสำมะโนในปี พ.ศ. " + y + ")";
+        } else {
+          opt.disabled = false;
+          opt.textContent = item.label;
+        }
+        srcSelect.appendChild(opt);
+      });
+
+      if (isCensusYear) {
+        srcSelect.value = lastCensusSourceMode || "compare_both";
+        srcSelect.title = "ปีสำมะโน พ.ศ. " + y + " สามารถเลือกได้ครบทั้ง 3 โหมด";
+      } else {
+        srcSelect.value = "dopa_only";
+        srcSelect.title = "ปี พ.ศ. " + y + " ไม่มีข้อมูลสำมะโน ระบบล็อกเป็นข้อมูลกรมการปกครอง (DOPA) อัตโนมัติ";
+      }
+
+      populateIndicatorDropdown(preserveIndicator);
+    }
 
     function populateIndicatorDropdown(preserveIndicator) {
       const mode = document.getElementById("sourceModeSelect").value;
@@ -1472,14 +1511,12 @@
         '<strong>มิติ:</strong> ' + indicatorLabels[currentIndicator];
 
       let tagsHtml = '<span class="badge badge-blue">พ.ศ. ' + year + '</span>';
-      if (currentSourceMode === "dopa_only") {
+      if (!DATASET.censusYears.includes(Number(year))) {
+        tagsHtml += '<span class="badge badge-amber">ไม่มีรอบสำมะโน → ใช้ข้อมูล DOPA</span>';
+      } else if (currentSourceMode === "dopa_only") {
         tagsHtml += '<span class="badge badge-blue">DOPA 36 ปี</span>';
-      } else if (DATASET.censusYears.includes(Number(year))) {
-        tagsHtml += '<span class="badge badge-green">มีข้อมูลสำมะโน</span>';
-      } else if (currentSourceMode === "census_only") {
-        tagsHtml += '<span class="badge badge-amber">ปี ' + year + ' ไม่มีสำมะโน → แสดงรอบล่าสุด พ.ศ. 2568</span>';
       } else {
-        tagsHtml += '<span class="badge badge-amber">สำมะโนอิงปี 2568</span>';
+        tagsHtml += '<span class="badge badge-green">มีข้อมูลสำมะโน</span>';
       }
       if (area.code === 2000) {
         tagsHtml += '<span class="badge badge-purple">ภาคกลาง: 25 จังหวัด (ไม่รวม กทม.)</span>';
@@ -1848,7 +1885,10 @@
             maintainAspectRatio: false,
             plugins: {
               legend: { position: "bottom", labels: { boxWidth: 14, font: { family: "inherit", size: 12 } } },
-              tooltip: { callbacks: { label: ctx => ctx.dataset.label + ": " + formatDec(ctx.raw, 2) + "%" } },
+              tooltip: {
+                itemSort: (a, b) => (b.raw ?? -Infinity) - (a.raw ?? -Infinity),
+                callbacks: { label: ctx => ctx.dataset.label + ": " + formatDec(ctx.raw, 2) + "%" }
+              },
               policy2542Line: { enabled: true, type: "category" }
             },
             scales: {
@@ -1900,7 +1940,10 @@
             interaction: { mode: "index", intersect: false },
             plugins: {
               legend: { position: "bottom", labels: { boxWidth: 14, font: { family: "inherit", size: 12 } } },
-              tooltip: { callbacks: { label: ctx => ctx.dataset.label + ": " + (isHH ? formatDec(ctx.raw, 2) + " คน/ครัวเรือน" : formatNum(ctx.raw) + " คน") } }
+              tooltip: {
+                itemSort: (a, b) => (b.raw ?? -Infinity) - (a.raw ?? -Infinity),
+                callbacks: { label: ctx => ctx.dataset.label + ": " + (isHH ? formatDec(ctx.raw, 2) + " คน/ครัวเรือน" : formatNum(ctx.raw) + " คน") }
+              }
             },
             scales: {
               y: {
@@ -2014,7 +2057,10 @@
           interaction: { mode: "index", intersect: false },
           plugins: {
             legend: { position: "bottom", labels: { boxWidth: 14, font: { family: "inherit", size: 12 } } },
-            tooltip: { callbacks: { label: ctx => ctx.dataset.label + ": " + formatNum(ctx.raw) + unitSuffix } }
+            tooltip: {
+              itemSort: (a, b) => (b.raw ?? -Infinity) - (a.raw ?? -Infinity),
+              callbacks: { label: ctx => ctx.dataset.label + ": " + formatNum(ctx.raw) + unitSuffix }
+            }
           },
           scales: {
             x: { title: { display: true, text: "ปี พ.ศ. (2533–2568)" }, ticks: { maxTicksLimit: 9, maxRotation: 0 } },
@@ -2483,12 +2529,24 @@
         rowsToDisplay.push({ ...getAreaInfo(3000), isSummary: true });
         rowsToDisplay.push({ ...getAreaInfo(5000), isSummary: true });
         rowsToDisplay.push({ ...getAreaInfo(1000), isSummary: true });
+      } else if (currentArea === "central_isan" || currentArea === "compare_isan" || [68, 62, 67, 69].includes(Number(currentArea))) {
+        rowsToDisplay.push({ code: "central_isan", name: "กลุ่มอีสานตอนกลาง (ร้อยแก่นสารสินธุ์)", region: "ภาคตะวันออกเฉียงเหนือ", isSummary: true });
+        [68, 62, 67, 69].forEach(code => rowsToDisplay.push({ ...getAreaInfo(code), isSummary: false }));
       } else {
-        rowsToDisplay.push({ code: "central_isan", name: "รวมกลุ่มอีสานตอนกลาง (4 จังหวัด)", region: "ภาคตะวันออกเฉียงเหนือ", isSummary: true });
-        [69, 62, 67, 68].forEach(code => rowsToDisplay.push({ ...getAreaInfo(code), isSummary: false }));
-        if (![69, 62, 67, 68].includes(Number(currentArea)) && currentArea !== "central_isan" && currentArea !== "compare_isan") {
-          const selectedProv = getAreaInfo(currentArea);
-          if (selectedProv) rowsToDisplay.push({ ...selectedProv, isSummary: false });
+        const selectedProv = getAreaInfo(currentArea);
+        if (selectedProv) {
+          rowsToDisplay.push({ ...selectedProv, isSummary: false });
+          const regionCodeByName = {
+            "ภาคกลาง": 2000,
+            "ภาคเหนือ": 3000,
+            "ภาคตะวันออกเฉียงเหนือ": 4000,
+            "ภาคใต้": 5000
+          };
+          const parentRegCode = regionCodeByName[selectedProv.region];
+          if (parentRegCode) {
+            rowsToDisplay.push({ ...getAreaInfo(parentRegCode), isSummary: true });
+          }
+          rowsToDisplay.push({ ...getAreaInfo(1000), isSummary: true });
         }
       }
       return rowsToDisplay;
@@ -3196,10 +3254,10 @@
 
     function resetDashboard() {
       document.getElementById("areaSelect").value = "69";
-      document.getElementById("sourceModeSelect").value = "compare_both";
+      lastCensusSourceMode = "compare_both";
       initYearDropdown();
       document.getElementById("yearSelect").value = "2568";
-      populateIndicatorDropdown("total_pop");
+      syncFiltersForYear("total_pop");
       selectedAllProvCodes = new Set([69]);
       allProvSortMode = "desc";
       const sortEl = document.getElementById("allProvSortSelect");
@@ -3339,10 +3397,18 @@
       if (e.target.id === "guideModal") closeGuide();
     }
 
-    // Event Listeners
+    // Event Listeners (Cascading: Year -> Source Mode -> Indicator)
     document.getElementById("areaSelect").addEventListener("change", renderAll);
-    document.getElementById("yearSelect").addEventListener("change", renderAll);
+    document.getElementById("yearSelect").addEventListener("change", () => {
+      const prevIndicator = document.getElementById("indicatorSelect").value;
+      syncFiltersForYear(prevIndicator);
+      renderAll();
+    });
     document.getElementById("sourceModeSelect").addEventListener("change", () => {
+      const y = Number(document.getElementById("yearSelect").value);
+      if (DATASET.censusYears.includes(y)) {
+        lastCensusSourceMode = document.getElementById("sourceModeSelect").value;
+      }
       const prevIndicator = document.getElementById("indicatorSelect").value;
       populateIndicatorDropdown(prevIndicator);
       renderAll();
@@ -3361,7 +3427,7 @@
     // Initial Execution
     window.addEventListener("DOMContentLoaded", () => {
       initYearDropdown();
-      populateIndicatorDropdown("total_pop");
+      syncFiltersForYear("total_pop");
       initAllProvPicker();
       renderAll();
     });
